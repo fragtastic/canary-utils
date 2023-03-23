@@ -1,0 +1,138 @@
+#!/bin/bash
+#.SYNOPSIS
+#    Adaption of Invoke-CreateCanarytokensFactoryLocal.ps1 to bash for Jamf deployments.
+#    Creates Canarytokens and drops them to local host.
+#    Uses Canarytoken Factory, so it can be safely used for mass deployment.
+#
+#.NOTES
+#    For this tool to work, you must have your Canary Console API enabled, please
+#    follow this link to learn how to do so:
+#    https://help.canary.tools/hc/en-gb/articles/360012727537-How-does-the-API-work-
+#
+#    Also, you must have a Canarytoken Factory Auth, and the Flock *ID* you want to deploy to beforehand.
+#    if you don't know how, please reach out to support@canary.tools.
+#
+#    ###################
+#    How does this work?
+#    ###################
+#    1. Create the flock you want the tokens to be part of in your Console.
+#    2. Get the Flock ID (https://docs.canary.tools/flocks/queries.html#list-flocks-summary)
+#    3. Create a Canarytoken Factory (https://docs.canary.tools/canarytokens/factory.html#create-canarytoken-factory-auth-string)
+#    4. Make sure the host has access to the internet.
+#    5. Create a policy in Jamf executing this script as a payload
+#    6. Define Pramater Values 4-9 as the constants below
+#    7. Enter the relevant information in the script parameter value fields.
+#    Last Edit: 2023-03-23
+#    Version 1.2 - Warner Bros. Discovery refactor
+#
+#   Supported tokens are: "aws-id"                : "AWS API Key",
+#                         "doc-msword"            : "MS Word Document",
+#                         "msexcel-macro"         : "MS Excel Macro Document",
+#                         "msword-macro"          : "MS Word Macro Document",
+#                         "pdf-acrobat-reader"    : "Acrobat PDF",
+#                         "slack-api"             : "Slack API Key",
+#                         "windows-dir"           : "Windows Folder"
+#
+#Constants
+DOMAIN="$4"
+readonly DOMAIN
+FACTORYAUTH="$5"
+readonly FACTORYAUTH
+FLOCKID="$6"
+readonly FLOCKID
+TARGETDIRECTORY="$7"
+readonly TARGETDIRECTORY
+TOKENTYPE="$8"
+readonly TOKENTYPE
+TOKENFILENAME="$9"
+readonly TOKENFILENAME
+
+#Collect unset variables from user.
+if [ -z "$TOKENTYPE" ]; then
+    /usr/bin/printf '\nNo token type set. Please set in one of the below token types in the Jamf policy\n> aws-id | doc-msword | msexcel-macro | msword-macro | pdf-acrobat-reader | slack-api | windows-dir'
+    exit 1
+fi
+
+#Don't continue unless $TOKENTYPE is supported
+case "$TOKENTYPE" in
+    "aws-id"|"doc-msword"|"msexcel-macro"|"msword-macro"|"pdf-acrobat-reader"|"slack-api"|"windows-dir")
+        /usr/bin/printf '\n[*] Token type is downloadable, proceeding'
+        ;;
+    *)
+        /usr/bin/printf "\n[X] Token type '$TOKENTYPE' cannot be downloaded."
+        exit 1
+        ;;
+esac
+
+if [ -z "$DOMAIN" ]; then
+    /usr/bin/printf '\nFull Canary domain (e.g. 'xyz.canary.tools') not set. Please configure in Jamf policy'
+    exit 1
+fi
+
+if [ -z "$FACTORYAUTH" ]; then
+    /usr/bin/printf '\nCanarytoken Factory Auth String not set. Please configure in Jamf policy'
+    exit 1
+fi
+
+if [ -z "$TARGETDIRECTORY" ]; then
+    /usr/bin/printf '\nNo target directory set. Please configure in Jamf policy'
+    exit 1
+fi
+
+if [ -z "$TOKENFILENAME" ]; then
+    /usr/bin/printf '\nNo file name set. Please configure in Jamf policy'
+    exit 1
+fi
+
+#Print current variables
+/usr/bin/printf "\n[*] Starting Script with the following params:"
+/usr/bin/printf "\nConsole Domain = $DOMAIN"
+/usr/bin/printf "\nFlock ID = $FLOCKID"
+/usr/bin/printf "\nTarget Directory = $TARGETDIRECTORY"
+/usr/bin/printf "\nToken Type = $TOKENTYPE"
+/usr/bin/printf "\nToken Filename = $TOKENFILENAME"
+
+#Checking target directory existance
+/usr/bin/printf "\n[*] Checking if '$TARGETDIRECTORY' exists..."
+
+if [ -d "$TARGETDIRECTORY" ]; then
+    /usr/bin/printf "\nDirectory exists"
+else
+    /bin/mkdir -p "$TARGETDIRECTORY"
+    /usr/bin/printf "\n$TARGETDIRECTORY was not found. directory has been created"
+    /bin/chmod 755 "$TARGETDIRECTORY"
+fi
+
+#Check whether token already exists
+OUTPUTFILENAME="$TARGETDIRECTORY/$TOKENFILENAME"
+
+/usr/bin/printf "\n[*] Dropping '$OUTPUTFILENAME'..."
+
+if [ -f "$OUTPUTFILENAME" ]; then
+    /usr/bin/printf "\nFile already exists."
+fi
+
+#Create token
+TOKENNAME=$OUTPUTFILENAME
+MACHINESERIAL=$(system_profiler SPHardwareDataType | awk -F':| ' '/Serial Number/ {print $NF}')
+
+/usr/bin/printf "\n[*] Signing to the API for a token..." ;
+
+GETTOKEN=$(/usr/bin/curl -s -X POST "https://${DOMAIN}/api/v1/canarytoken/factory/create" -d factory_auth="$FACTORYAUTH" -d memo="{\"hostname\":\"$(hostname)\",\"serial\":\"$MACHINESERIAL\",\"operatingsystem\":\"macos\",\"path\":\"$OUTPUTFILENAME\"}" -d flock_id="$FLOCKID" -d kind="$TOKENTYPE" --tlsv1.2 --tls-max 1.2)
+TOKENID=$(echo "$GETTOKEN" | /usr/bin/awk '/"canarytoken": "/ {print $NF}' | tr -d '",')
+
+if echo "$GETTOKEN" | grep -q '"result": "success"'; then
+    /usr/bin/printf "\n[*] Token Created (ID: $TOKENID)."
+else
+    /usr/bin/printf "\n[X] Creation of $TOKENNAME failed."
+    exit 1
+fi
+
+#Download Token
+/usr/bin/printf "\n[*] Downloading Token from Console..."
+
+/usr/bin/curl -s -G -L --tlsv1.2 --tls-max 1.2 --output "$OUTPUTFILENAME" -J "https://$DOMAIN/api/v1/canarytoken/factory/download" -d factory_auth="$FACTORYAUTH" -d canarytoken="$TOKENID"
+
+/bin/chmod 755 "$OUTPUTFILENAME"
+
+/usr/bin/printf "\n[*] Token Successfully written to destination: '$OUTPUTFILENAME'."
