@@ -36,6 +36,11 @@ Param (
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
 Set-StrictMode -Version 2.0
 
+#Retrieve system metadata for memo field
+$hostname = [System.Net.Dns]::GetHostByName($env:computerName).HostName
+$serial = (Get-WmiObject win32_bios).Serialnumber
+$os = (Get-WmiObject Win32_OperatingSystem).Caption
+
 # Connect to API
 # Get Console Domain
 $ApiHost = [string]::Empty
@@ -91,7 +96,7 @@ $PostData = @{
     factory_auth = "$ApiToken"
     kind       = "$TokenType"
     flock_id = "$FlockID"
-    memo       = "$([System.Net.Dns]::GetHostName()) - $TokenName"
+    memo       = @{hostname = $hostname; serial = $serial; operating_system = $os; path = $TokenName} | ConvertTo-Json
 }
 Write-Host -ForegroundColor Green "[*] Hitting API to create token ..."
 $CreateResult = Invoke-RestMethod -Method Post -Uri "https://$ApiHost$ApiBaseURL/canarytoken/factory/create" -Body $PostData
