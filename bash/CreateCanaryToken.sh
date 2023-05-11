@@ -51,7 +51,7 @@ REGEX_DOMAIN="^([a-zA-Z0-9]{8,8}).canary.tools$"
 REGEX_FACTORYAUTH="^[a-zA-Z0-9]{32,32}$"
 REGEX_FLOCKID="^flock:([a-f0-9]{32,32}|default)$"
 REGEX_TOKENTYPE="^(aws-id|doc-msword|doc-msexcel|slack-api|windows-dir)$"
-REGEX_MEMO='^[[:space:]]*{[[:space:]]*(\"[a-zA-Z0-9\-\_]+\"[[:space:]]*:[[:space:]]*\"[a-zA-Z0-9\-\_[:space:]]+\")([[:space:]]*,[[:space:]]*\"[a-zA-Z0-9\-\_]+\"[[:space:]]*:[[:space:]]*\"[a-zA-Z0-9\-\_[:space:]]+\")*[[:space:]]*}[[:space:]]*$'
+REGEX_MEMO='^[[:space:]]*{[[:space:]]*(\"[a-zA-Z0-9\-\_\.[:space:]]+\"[[:space:]]*:[[:space:]]*\"[a-zA-Z0-9\-\_\.[:space:]]+\")([[:space:]]*,[[:space:]]*\"[a-zA-Z0-9\-\_\.[:space:]]+\"[[:space:]]*:[[:space:]]*\"[a-zA-Z0-9\-\_\.[:space:]]+\")*[[:space:]]*}[[:space:]]*$'
 
 
 #Set script flags
